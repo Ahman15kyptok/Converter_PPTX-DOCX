@@ -45,11 +45,11 @@ def _append_inline_runs(paragraph, node):
         paragraph.add_run("\n")
         return
 
-    # Определяем стиль для текущего узла
+    
     bold = name in ("strong", "b")
     italic = name in ("i", "em")
 
-    # Если это жирный/курсив — применяем к содержимому
+ 
     if bold or italic:
         text = node.get_text()
         run = paragraph.add_run(text)
@@ -59,7 +59,6 @@ def _append_inline_runs(paragraph, node):
         run.font.color.rgb = RGBColor(0, 0, 0)
         return
 
-    # Иначе — рекурсивно идём по детям
     for child in node.children:
         _append_inline_runs(paragraph, child)
 
@@ -71,13 +70,13 @@ def add_html_block(doc, html: str):
     """
     soup = BeautifulSoup(html, "html.parser")
 
-    # Нормализация: <b> → <strong>, <i> → <em> (не обязательно, но ок)
+    
     for b in soup.find_all("b"):
         b.name = "strong"
     for i in soup.find_all("i"):
         i.name = "em"
 
-    # Берём только “значимые” теги верхнего уровня
+    
     elements = []
     for el in soup.contents:
         if isinstance(el, Tag):
@@ -136,4 +135,5 @@ if __name__ == "__main__":
         json_path=r"E:\check_slide\slides_report.json",
         output_path=r"E:\check_slide\result.docx",
     )
+
 
