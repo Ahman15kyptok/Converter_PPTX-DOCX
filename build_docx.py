@@ -4,7 +4,7 @@ from docx import Document
 from docx.shared import Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from bs4 import BeautifulSoup
-
+from bs4 import BeautifulSoup, NavigableString, Tag
 
 def add_black_heading(doc, text, level=1):
     h = doc.add_heading(text, level=level)
@@ -21,33 +21,81 @@ def add_paragraph(doc, text, bold=False):
     run.font.color.rgb = RGBColor(0, 0, 0)
 
 
-def add_html_block(doc, html: str):
 
+
+def _append_inline_runs(paragraph, node):
+    """
+    Рекурсивно добавляет текст в paragraph, соблюдая <strong>/<b> и <i>/<em>.
+    Никакие HTML-теги в docx не попадают.
+    """
+    if isinstance(node, NavigableString):
+        text = str(node)
+        if text:
+            run = paragraph.add_run(text)
+            run.font.size = Pt(12)
+            run.font.color.rgb = RGBColor(0, 0, 0)
+        return
+
+    if not isinstance(node, Tag):
+        return
+
+    name = node.name.lower()
+
+    if name == "br":
+        paragraph.add_run("\n")
+        return
+
+    # Определяем стиль для текущего узла
+    bold = name in ("strong", "b")
+    italic = name in ("i", "em")
+
+    # Если это жирный/курсив — применяем к содержимому
+    if bold or italic:
+        text = node.get_text()
+        run = paragraph.add_run(text)
+        run.bold = bold
+        run.italic = italic
+        run.font.size = Pt(12)
+        run.font.color.rgb = RGBColor(0, 0, 0)
+        return
+
+    # Иначе — рекурсивно идём по детям
+    for child in node.children:
+        _append_inline_runs(paragraph, child)
+
+
+def add_html_block(doc, html: str):
+    """
+    HTML → DOCX (p, ul, li, strong/b, i/em, br).
+    Теги не пишутся в docx как текст.
+    """
     soup = BeautifulSoup(html, "html.parser")
 
-
+    # Нормализация: <b> → <strong>, <i> → <em> (не обязательно, но ок)
     for b in soup.find_all("b"):
         b.name = "strong"
+    for i in soup.find_all("i"):
+        i.name = "em"
 
-    for elem in soup.children:
-        if elem.name == "p":
+    # Берём только “значимые” теги верхнего уровня
+    elements = []
+    for el in soup.contents:
+        if isinstance(el, Tag):
+            elements.append(el)
+
+    for elem in elements:
+        name = elem.name.lower()
+
+        if name == "p":
             p = doc.add_paragraph()
             for child in elem.children:
-                if child.name == "strong":
-                    run = p.add_run(child.get_text())
-                    run.bold = True
-                else:
-                    run = p.add_run(str(child))
+                _append_inline_runs(p, child)
 
-                run.font.size = Pt(12)
-                run.font.color.rgb = RGBColor(0, 0, 0)
-
-        elif elem.name == "ul":
-            for li in elem.find_all("li"):
-                p = doc.add_paragraph(li.get_text(), style="List Bullet")
-                for run in p.runs:
-                    run.font.size = Pt(12)
-                    run.font.color.rgb = RGBColor(0, 0, 0)
+        elif name == "ul":
+            for li in elem.find_all("li", recursive=False):
+                p = doc.add_paragraph(style="List Bullet")
+                for child in li.children:
+                    _append_inline_runs(p, child)
 
 
 
@@ -88,3 +136,4 @@ if __name__ == "__main__":
         json_path=r"E:\check_slide\slides_report.json",
         output_path=r"E:\check_slide\result.docx",
     )
+
