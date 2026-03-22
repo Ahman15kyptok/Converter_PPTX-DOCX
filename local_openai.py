@@ -124,29 +124,7 @@ async def ask_openai_async(
         )
 
 
-async def upload_files_from_s3(bucket_info, s3_keys):
 
-    s3_yandex_key = bucket_info[0]
-    s3_yandex_secret = bucket_info[1]
-    bucket_name = bucket_info[2]
-
-    s3 = boto3.client(
-        "s3",
-        aws_access_key_id=s3_yandex_key,
-        aws_secret_access_key=s3_yandex_secret,
-        region_name="us-east-1",
-        endpoint_url="https://storage.yandexcloud.net",
-        config=Config(signature_version="s3v4"),
-    )
-
-    files = []
-    for s3_key in s3_keys:
-        s3_response = s3.get_object(Bucket=bucket_name, Key=s3_key)
-        file_content = s3_response["Body"].read()
-        filename = s3_key.split("/")[-1]
-        files.append({"filename": filename, "bytes": file_content})
-
-    return files
 
 
 async def upload_files_from_s3_with_conversion(bucket_info, s3_keys, url, local_key, local_proxy_key):
