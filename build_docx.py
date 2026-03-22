@@ -1,10 +1,55 @@
 import json
+import os
 from datetime import datetime
 from docx import Document
-from docx.shared import Pt, RGBColor
+from docx.shared import Pt, RGBColor, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from bs4 import BeautifulSoup
-from bs4 import BeautifulSoup, NavigableString, Tag
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+WORKDIR = os.getenv("WORKDIR", os.path.join(BASE_DIR, "workdir"))
+
+def apply_gost_styles(doc: Document):
+    section = doc.sections[0]
+    section.left_margin = Cm(3)
+    section.right_margin = Cm(1.5)
+    section.top_margin = Cm(2)
+    section.bottom_margin = Cm(2)
+
+    style = doc.styles["Normal"]
+    style.font.name = "Times New Roman"
+    style.font.size = Pt(14)
+    style.font.color.rgb = RGBColor(0, 0, 0)
+
+    pfmt = style.paragraph_format
+    pfmt.line_spacing = 1.5
+    pfmt.space_before = Pt(0)
+    pfmt.space_after = Pt(0)
+    pfmt.first_line_indent = Cm(1.25)
+    pfmt.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
+
+def add_cover_page(doc: Document, title_text: str = "Доклад по презентации"):
+    p = doc.add_paragraph("МИНОБРНАУКИ РОССИИ")
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p.runs[0].bold = True
+
+    p = doc.add_paragraph("\n\n\n")
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    p = doc.add_paragraph(title_text)
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p.runs[0].bold = True
+
+    doc.add_paragraph("\n\n\n")
+
+    p = doc.add_paragraph(f"Автор: Студент")
+    p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    p = doc.add_paragraph(f"Дата: {datetime.now().strftime('%d.%m.%Y')}")
+    p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+
+    doc.add_page_break()
+
 
 def add_black_heading(doc, text, level=1):
     h = doc.add_heading(text, level=level)
@@ -12,90 +57,72 @@ def add_black_heading(doc, text, level=1):
         run.font.color.rgb = RGBColor(0, 0, 0)
         run.font.bold = True
 
+    if level <= 2:
+        h.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    else:
+        h.alignment = WD_ALIGN_PARAGRAPH.LEFT
+
 
 def add_paragraph(doc, text, bold=False):
     p = doc.add_paragraph()
     run = p.add_run(text)
-    run.font.size = Pt(12)
+    run.font.size = Pt(14)
     run.font.bold = bold
     run.font.color.rgb = RGBColor(0, 0, 0)
 
 
-
-
-def _append_inline_runs(paragraph, node):
-    """
-    Рекурсивно добавляет текст в paragraph, соблюдая <strong>/<b> и <i>/<em>.
-    Никакие HTML-теги в docx не попадают.
-    """
-    if isinstance(node, NavigableString):
-        text = str(node)
-        if text:
-            run = paragraph.add_run(text)
-            run.font.size = Pt(12)
-            run.font.color.rgb = RGBColor(0, 0, 0)
-        return
-
-    if not isinstance(node, Tag):
-        return
-
-    name = node.name.lower()
-
-    if name == "br":
-        paragraph.add_run("\n")
-        return
-
-    
-    bold = name in ("strong", "b")
-    italic = name in ("i", "em")
-
- 
-    if bold or italic:
-        text = node.get_text()
-        run = paragraph.add_run(text)
-        run.bold = bold
-        run.italic = italic
-        run.font.size = Pt(12)
-        run.font.color.rgb = RGBColor(0, 0, 0)
-        return
-
-    for child in node.children:
-        _append_inline_runs(paragraph, child)
-
-
 def add_html_block(doc, html: str):
-    """
-    HTML → DOCX (p, ul, li, strong/b, i/em, br).
-    Теги не пишутся в docx как текст.
-    """
     soup = BeautifulSoup(html, "html.parser")
 
-    
     for b in soup.find_all("b"):
         b.name = "strong"
-    for i in soup.find_all("i"):
-        i.name = "em"
 
-    
-    elements = []
-    for el in soup.contents:
-        if isinstance(el, Tag):
-            elements.append(el)
-
-    for elem in elements:
-        name = elem.name.lower()
-
-        if name == "p":
+    for elem in soup.children:
+        if elem.name == "p":
             p = doc.add_paragraph()
             for child in elem.children:
-                _append_inline_runs(p, child)
+                if child.name == "strong":
+                    run = p.add_run(child.get_text())
+                    run.bold = True
+                else:
+                    run = p.add_run(str(child))
 
-        elif name == "ul":
-            for li in elem.find_all("li", recursive=False):
-                p = doc.add_paragraph(style="List Bullet")
-                for child in li.children:
-                    _append_inline_runs(p, child)
+                run.font.size = Pt(14)
+                run.font.color.rgb = RGBColor(0, 0, 0)
 
+        elif elem.name == "ul":
+            for li in elem.find_all("li"):
+                p = doc.add_paragraph(li.get_text(), style="List Bullet")
+                for run in p.runs:
+                    run.font.size = Pt(14)
+                    run.font.color.rgb = RGBColor(0, 0, 0)
+
+
+def extract_sources_from_slide_html(html: str) -> list[str]:
+    soup = BeautifulSoup(html or "", "html.parser")
+    sources = []
+
+    p_sources = None
+    for p in soup.find_all("p"):
+        if "источники" in p.get_text(" ", strip=True).lower():
+            p_sources = p
+            break
+
+    if not p_sources:
+        return sources
+
+    ul = p_sources.find_next("ul")
+    if not ul:
+        return sources
+
+    for li in ul.find_all("li"):
+        txt = li.get_text(" ", strip=True)
+        if not txt:
+            continue
+        if "источники на слайде не указаны" in txt.lower():
+            continue
+        sources.append(txt)
+    return sources
 
 
 def build_docx_from_slides(json_path: str, output_path: str):
@@ -103,20 +130,11 @@ def build_docx_from_slides(json_path: str, output_path: str):
         slides = json.load(f)
 
     doc = Document()
+    apply_gost_styles(doc)
+    add_cover_page(doc, title_text="Доклад по презентации")
 
-    # обложка
-    title = doc.add_heading("Доклад по презентации", level=0)
-    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    for run in title.runs:
-        run.font.color.rgb = RGBColor(0, 0, 0)
+    all_sources: list[str] = []
 
-    p = doc.add_paragraph("\nАвтор: Студент\n")
-    p.add_run("Дата: ").bold = True
-    p.add_run(datetime.now().strftime("%d.%m.%Y"))
-
-    doc.add_page_break()
-
-    # слайды
     for slide in slides:
         slide_num = slide["slide"]
         html_text = slide["generated_html"]
@@ -124,7 +142,27 @@ def build_docx_from_slides(json_path: str, output_path: str):
         add_black_heading(doc, f"Слайд {slide_num}", level=1)
         add_html_block(doc, html_text)
 
+        all_sources.extend(extract_sources_from_slide_html(html_text))
+
         doc.add_page_break()
+
+    unique_sources = []
+    seen = set()
+    for s in all_sources:
+        key = s.strip().lower()
+        if key and key not in seen:
+            seen.add(key)
+            unique_sources.append(s.strip())
+
+    add_black_heading(doc, "Список использованных источников", level=1)
+    if unique_sources:
+        for i, src in enumerate(unique_sources, start=1):
+            p = doc.add_paragraph(f"{i}. {src}")
+            for run in p.runs:
+                run.font.size = Pt(14)
+                run.font.color.rgb = RGBColor(0, 0, 0)
+    else:
+        add_paragraph(doc, "Источники не обнаружены.")
 
     doc.save(output_path)
     print("DOCX saved:", output_path)
@@ -132,8 +170,6 @@ def build_docx_from_slides(json_path: str, output_path: str):
 
 if __name__ == "__main__":
     build_docx_from_slides(
-        json_path=r"E:\check_slide\slides_report.json",
-        output_path=r"E:\check_slide\result.docx",
+        json_path=os.path.join(WORKDIR, "slides_report.json"),
+        output_path=os.path.join(WORKDIR, "result.docx"),
     )
-
-
