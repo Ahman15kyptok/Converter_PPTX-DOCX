@@ -1,13 +1,15 @@
-import fitz  # PyMuPDF
+import os
+import fitz
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+WORKDIR = os.getenv("WORKDIR", os.path.join(BASE_DIR, "workdir"))
 
 def pdf_to_pages_text(pdf_path: str) -> list[str]:
-
     doc = fitz.open(pdf_path)
     pages = []
     for i in range(doc.page_count):
         page = doc.load_page(i)
         text = page.get_text("text")
-
         text = "\n".join(line.strip() for line in text.splitlines() if line.strip())
         pages.append(text)
     doc.close()
@@ -15,7 +17,7 @@ def pdf_to_pages_text(pdf_path: str) -> list[str]:
 
 
 if __name__ == "__main__":
-    pdf_path = r"E:\check_slide\out.pdf"
+    pdf_path = os.path.join(WORKDIR, "out.pdf")
     pages = pdf_to_pages_text(pdf_path)
     print("Pages:", len(pages))
     for idx, t in enumerate(pages[:3], start=1):
