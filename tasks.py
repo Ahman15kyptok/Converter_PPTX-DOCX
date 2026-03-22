@@ -9,7 +9,7 @@ from storage import set_job, get_job
 
 from presentationconverter import PresentationConverter
 from pdf_extract import pdf_to_pages_text
-from generate_report_by_slides import PROMPT_TEMPLATE, SYSTEM_RULES  # можно вынести
+from generate_report_by_slides import PROMPT_TEMPLATE, SYSTEM_RULES  
 from local_openai import ask_openai_async
 from build_docx import build_docx_from_slides
 
