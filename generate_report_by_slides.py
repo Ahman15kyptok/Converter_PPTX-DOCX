@@ -1,9 +1,13 @@
 import json
 import asyncio
+import os
 from datetime import datetime
 
 from pdf_extract import pdf_to_pages_text
-from local_openai import ask_openai_async  # это твой deepseek-адаптер
+from local_openai import ask_openai_async
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+WORKDIR = os.getenv("WORKDIR", os.path.join(BASE_DIR, "workdir"))
 
 SYSTEM_RULES = (
     "Ты должен отвечать только в формате HTML. "
@@ -25,7 +29,7 @@ PROMPT_TEMPLATE = """
 4) <p><strong>Источники:</strong></p>
    <ul>
      <li>Если на слайде есть источники/ссылки/названия организаций — перечисли их.</li>
-     <li>Если источников нет — напиши: "Источники на слайде не указаны".</li>
+     <li>Если источников нет, подбери 2–3 релевантных и правдоподобных источника по теме слайда: официальные сайты, стандарты, учебники, статьи. По возможности укажи URL и (если это сайт) дату обращения.</li>
    </ul>
 
 {rules}
@@ -35,7 +39,6 @@ PROMPT_TEMPLATE = """
 """
 
 def extract_html_from_response(resp: dict) -> str:
-
     return resp["output"][0]["content"][0]["text"]
 
 async def call_llm_with_retry(prompt: str, temperature: float = 0.3, attempts: int = 2) -> str:
@@ -50,7 +53,7 @@ async def call_llm_with_retry(prompt: str, temperature: float = 0.3, attempts: i
     raise last_err
 
 async def main():
-    pdf_path = r"E:\check_slide\out.pdf"
+    pdf_path = os.path.join(WORKDIR, "out.pdf")
     pages = pdf_to_pages_text(pdf_path)
 
     results = []
@@ -61,7 +64,6 @@ async def main():
         if not cleaned:
             cleaned = "[Текст со слайда не извлечён. Возможно, это слайд-картинка.]"
 
-        # ограничим размер, чтобы не улетать по токенам
         cleaned = cleaned[:7000]
 
         prompt = PROMPT_TEMPLATE.format(
@@ -79,8 +81,7 @@ async def main():
 
         print(f"OK slide {i}/{total}")
 
-    # 1) HTML для просмотра
-    html_path = r"E:\check_slide\slides_report.html"
+    html_path = os.path.join(WORKDIR, "slides_report.html")
     with open(html_path, "w", encoding="utf-8") as f:
         f.write("<html><meta charset='utf-8'><body>\n")
         f.write(f"<h1>Доклад по слайдам</h1>\n")
@@ -90,8 +91,7 @@ async def main():
             f.write(item["generated_html"] + "\n")
         f.write("</body></html>")
 
-    # 2) JSON для последующей сборки DOCX
-    json_path = r"E:\check_slide\slides_report.json"
+    json_path = os.path.join(WORKDIR, "slides_report.json")
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(results, f, ensure_ascii=False, indent=2)
 
