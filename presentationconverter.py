@@ -104,12 +104,3 @@ class PresentationConverter:
             return pdf_content
 
 
-#converter = PresentationConverter()
-
-#file_path = "/mnt/c/Users/user/Desktop/StartStage/AI/check_slide/test/t1.pdf"
-
-#if converter.is_pdf(file_path):
-#    print("Это PDF.")
-#else:
-#    pdf_path = converter.convert_to_pdf(file_path)
-#    print(f"Файл успешно конвертирован: {pdf_path}")
